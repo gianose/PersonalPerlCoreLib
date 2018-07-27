@@ -4,8 +4,8 @@
 # @class: Exception
 # @author: Gregory Rose
 # @created: 20180725
-# @modified: 20180726
-# @version: 0.02
+# @modified: 20180727
+# @version: 0.03
 
 package Exception;
 require Exporter;
@@ -22,13 +22,16 @@ use constant PWD => $ENV{PWD} =~ s/\/\w+$//r;
 use constant EXCEPTIONS => {
 	'InvalidConfiguration' => 106, 
 	'InitializationError' => 110,
+	'ArgumentCountError' => 103,
 	'IllegalAccessError' => 108, 
 	'DatabaseException' => 109,
 	'UnexpectedFormat' => 112, 
 	'ObscureException' => 104,
+	'DomainException' => 102,
 	'InvalidArgument' => 113,
 	'AccessFailed' => 105,
 	'FatalError' => 107,
+	'TypeError' => 101,
 	'IOError' => 111
 };
 
@@ -42,7 +45,7 @@ sub Exception {
 	# @description
 	#  Utilized in order to initialize the instance variable exceptions
 	#  if called with option hash parameter.
-	# @param: hash|optional : Hash that contain a camel case string as the key and integer between 64-104 as the value.
+	# @param: hash|optional : Hash that contain a camel case string as the key and integer between 64-100 as the value.
 	# @usage:
 	#  use constant FAULT = new Exception(\%FAULTS)
 	# @example:
@@ -54,11 +57,21 @@ sub Exception {
 		my $self = {};
 		
 		if (@_) {
-			throw("InvalidArgument", "Incorrect number of arguments expected 1 received " . scalar(@_)) unless scalar(@_) == 1;
-			throw("InvalidArgument", "Incorrect data type expected a hash, received " . ref($_[0])) unless ref($_[0]) eq "HASH";
+			throw("ArgumentCountError", "Incorrect number of arguments expected 1 received " . scalar(@_)) unless scalar(@_) == 1;
+			throw("TypeError", "Incorrect data type expected a hash, received " . ref($_[0])) unless ref($_[0]) eq "HASH";
+
 		}
 
 		$self->{exception} = shift if (@_);
+
+		my $checkExitCode = sub {
+			throw("DomainException", "The provided exit code '$_[0]' does not fall within the 64-90 domain") unless $_[0] >= 64 && $_[0] <= 90; 
+		};
+
+		foreach my $key (keys $self->{exception}) {
+			throw("InvalidArgument", "Exception '${key}' already exist in the default exception list") if defined(EXCEPTIONS->{$key});
+			&$checkExitCode(EXCEPTIONS->{$key});
+		}
 
 		bless $self, $class;
 		return $self;
@@ -73,7 +86,7 @@ sub Exception {
 	sub incite{
 		my $self = shift if( scalar @_ >= 3 && ref($_[0]) eq __PACKAGE__ );
 
-		throw("InvalidArgument", "Incorrect number of arguments expected 2 received " . scalar @_) unless scalar @_ == 2;
+		throw("ArgumentCountError", "Incorrect number of arguments expected 2 received " . scalar @_) unless scalar @_ == 2;
 
 		my($excp, $excp_msg) = @_;
 		my($frame, @details);
@@ -92,7 +105,7 @@ sub Exception {
 		return defined($self) ? $self : 1;
 	}
 
-	# @function: excp.throw
+	# @function: throw
 	# @description:
 	#  If provided with the corresponding exception and message will output the exception and message to
 	#  standard error. If `incite` was called before hand will output the content of the `stack`
@@ -109,7 +122,7 @@ sub Exception {
 	sub throw{
 		my $self = shift if( scalar @_ >= 3 && ref($_[0]) eq __PACKAGE__ );
 
-		throw("InvalidArgument", "Incorrect number of arguments expected 2 or 3 received " . scalar @_) if (!@stack && (scalar @_ < 2 || scalar @_ > 3));
+		throw("ArgumentCountError", "Incorrect number of arguments expected 2 or 3 received " . scalar @_) if (!@stack && (scalar @_ < 2 || scalar @_ > 3));
 		
 		my $terms = defined($self) ? sub { return defined(EXCEPTIONS->{$_[0]}) || defined($self->{exception}->{$_[0]}); } : sub { return defined(EXCEPTIONS->{$_[0]}); };
 		
@@ -133,6 +146,42 @@ sub Exception {
 		
 		exit(defined(EXCEPTIONS->{$excp}) ? EXCEPTIONS->{$excp} : $self->{exception}->{$excp});
 	}
+
+	# @function: try
+	# @description:
+	#   Attempts to execute the provided code block, and capture the exit code.
+	#   It then execute the corresponding catch function making available the exit code.
+	# @param: subroutine : The code block to execute.
+	# @param: scalar     : A reference to the catch subroutine.
+	# @public
+	sub try(&$) {
+		my($try, $catch) = @_;
+
+		my $child = fork();
+		
+		unless($child){
+			&$try;
+		} else {
+			my $pid = wait();
+
+			throw("ObscureException", "No child process was created.") if $pid < 0;
+
+			local $_ = $? >> 8;
+
+			&$catch;
+		}
+
+		map undef $_, &try, $catch;
+
+		return 1;
+	}
+
+	# @function: catch
+	# @description:
+	#   An identity function that will return the results of the provided code block.
+	# @param: subroutine: The code block to execute.
+	# @public
+	sub catch(&) { return $_[0]; } 
 
 	return 1;
 }
