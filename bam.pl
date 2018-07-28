@@ -1,7 +1,6 @@
 #!/usr/bin/env perl
 
 use Exception;
-use Switch;
 use Data::Dumper;
 
 #my %foo = (
@@ -44,35 +43,15 @@ sub UnitTest {
 	sub unitTest(@) {
 		my $unit = shift;
 
-		foreach ($unit) {
-			switch(scalar @{ $_->{params} }) {
-				case 0 {
-					try {
-						$_->{function}();
-					} catch {
-						/$_->{expect}/ && print "Hello There " . $_->{expect} . "\n";
-					}
-				}
-				case 1 {
-					try {
-						$_->{function}($_->{params}[0]);
-					} catch {
-						/$_->{expect}/ && print "Hello There " . $_->{expect} . "\n";
-					}
-				}
-				case 2 {
-					try {
-						$_->{function}($_->{params}[0], $_->{params}[1]);
-					} catch {
-						/$_->{expect}/ && print "Hello There " . $_->{expect} . "\n";
-					}
-				}
-			}
-		}
+		scalar @{ $_->{params} };
 	}
 
 	return 1;
 }
 
-UnitTest;
-unitTest(@ERROR);
+&{sub{
+	local $_ = shift;
+	/burger/ && { print "Clean and out\n" };
+	/cheese/ && { print "hello there\n" };
+	/fries/  && { print "This works\n" };
+}}('fries');
